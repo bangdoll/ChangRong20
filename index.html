@@ -145,11 +145,12 @@ footer{margin-top:auto;padding-top:40px;text-align:center;font-size:11px;color:#
 .map-empty{padding:50px 24px;color:#a99b82;border:1px dashed var(--line);border-radius:14px;font-size:14px;line-height:1.9}
 .marker{
   position:absolute;transform:translate(-50%,-50%);width:34px;height:34px;border-radius:50%;
-  display:grid;place-items:center;font-size:13px;font-weight:700;cursor:pointer;
+  display:grid;place-items:center;padding:0;font-size:13px;font-weight:700;cursor:pointer;
   background:rgba(184,144,47,.92);color:#241a08;border:2px solid #fff5e0;
   box-shadow:0 2px 8px rgba(0,0,0,.4);font-family:"Noto Serif TC",serif;
 }
 .marker:active{transform:translate(-50%,-50%) scale(.9)}
+.marker:focus-visible{outline:2px solid #fff5e0;outline-offset:2px}
 .map-note{font-size:12px;color:#a99b82;margin-top:14px;letter-spacing:.05em}
 .loading{text-align:center;padding:30px;color:#a99b82;font-size:14px}
 .spin{width:26px;height:26px;border:2px solid var(--line);border-top-color:var(--gold);border-radius:50%;margin:0 auto 12px;animation:sp .8s linear infinite}
@@ -230,8 +231,33 @@ const CONFIG = {
   // ④ 每桌在平面圖上的位置 (x,y 為百分比 0~100,從左上角算)
   //    開啟網址後加上 ?setup=1 進入定位模式,點圖即可取得座標
   tablePins: {
-    // "1": { x: 20, y: 30 },
-    // "2": { x: 50, y: 30 },
+    "1": { x: 78.9, y: 18.7 },
+    "2": { x: 79.1, y: 48.1 },
+    "3": { x: 71.8, y: 18.7 },
+    "4": { x: 72.6, y: 48.1 },
+    "5": { x: 65.3, y: 18.7 },
+    "6": { x: 66.2, y: 48.1 },
+    "7": { x: 58.9, y: 18.7 },
+    "8": { x: 59.8, y: 48.1 },
+    "9": { x: 52.6, y: 18.7 },
+    "10": { x: 53.4, y: 48.1 },
+    "11": { x: 46.2, y: 22.7 },
+    "12": { x: 40.6, y: 48.1 },
+    "13": { x: 34.3, y: 18.7 },
+    "14": { x: 34.3, y: 48.1 },
+    "15": { x: 75.0, y: 28.7 },
+    "16": { x: 27.8, y: 48.1 },
+    "17": { x: 68.6, y: 28.7 },
+    "18": { x: 79.0, y: 63.0 },
+    "19": { x: 62.3, y: 28.7 },
+    "20": { x: 73.6, y: 63.0 },
+    "21": { x: 55.8, y: 28.7 },
+    "22": { x: 79.0, y: 79.0 },
+    "23": { x: 39.1, y: 28.7 },
+    "24": { x: 73.6, y: 79.0 },
+    "25": { x: 29.1, y: 28.7 },
+    "主桌": { x: 83.9, y: 36.9, label: "主" },
+    "兒童桌": { x: 24.4, y: 13.7, label: "兒" },
   },
 };
 
@@ -823,13 +849,16 @@ function buildMap(){
     stage.innerHTML = `<div class="map-empty">尚未設定平面圖<br><span style="font-size:12px;opacity:.7">請在程式碼 CONFIG.floorPlanUrl 填入圖片網址</span></div>`;
     return;
   }
-  const pins = Object.entries(CONFIG.tablePins).map(([n,p])=>
-    `<div class="marker" style="left:${p.x}%;top:${p.y}%" onclick="openTable('${esc(n)}','')">${esc(n)}</div>`
-  ).join("");
+  const pinEntries = Object.entries(CONFIG.tablePins);
+  const pins = pinEntries.map(([n,p])=>{
+    const target = p.table || n;
+    const markerLabel = p.label || n;
+    return `<button class="marker" type="button" style="left:${p.x}%;top:${p.y}%" onclick="openTable('${esc(target)}','')" aria-label="查看${esc(target)}賓客">${esc(markerLabel)}</button>`;
+  }).join("");
   stage.innerHTML = `<div class="map-frame">
       <img src="${esc(CONFIG.floorPlanUrl)}" alt="現場平面圖" id="fpImg">${pins}
     </div>
-    <div class="map-note">點擊金色桌號圓點,即可查看該桌賓客</div>`;
+    <div class="map-note">${pinEntries.length ? "點擊金色桌號圓點,即可查看該桌賓客" : "尚未設定桌號圓點"}</div>`;
 }
 
 /* 彈窗控制 */
