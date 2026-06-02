@@ -882,14 +882,31 @@ function parseCSV(text){
 }
 
 async function load(){
-  // 無外部連線需求: 直接讀內建名單
   if(!CONFIG.sheetCsvUrl){ DATA = parseCSV(EMBEDDED_CSV); return; }
-  // 若有設定 Google 試算表,改為即時讀取 (需連網)
+  
+  // 實作 2 秒超時機制，防止請求卡死或被瀏覽器外掛懸空阻斷
+  const controller = new AbortController();
+  const timeoutId = setTimeout(() => controller.abort(), 2000);
+  
   try{
-    const res = await fetch(CONFIG.sheetCsvUrl);
-    DATA = parseCSV(await res.text());
+    const res = await fetch(CONFIG.sheetCsvUrl, { signal: controller.signal });
+    clearTimeout(timeoutId);
+    if (!res.ok) throw new Error("Network response was not ok");
+    
+    const text = await res.text();
+    // 檢查返回的內容是否為 HTML (防止試算表未公開時重定向至 Google 登入頁)
+    if (text.trim().startsWith("<!DOCTYPE") || text.trim().startsWith("<html")) {
+      throw new Error("Returned content is HTML, probably a login page redirect or error page");
+    }
+    
+    DATA = parseCSV(text);
+    if (DATA.length === 0) {
+      throw new Error("Parsed data is empty");
+    }
   }catch(e){
-    DATA = parseCSV(EMBEDDED_CSV);   // 連不上就回退用內建名單
+    clearTimeout(timeoutId);
+    console.warn("Fetch from Google Sheets failed or timed out, fallback to embedded data:", e);
+    DATA = parseCSV(EMBEDDED_CSV);
   }
 }
 
