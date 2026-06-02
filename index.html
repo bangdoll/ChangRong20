@@ -219,7 +219,7 @@ const CONFIG = {
 
   // ① Google 試算表「發布到網路 → CSV」的網址 (見下方說明)
   //    留空則使用內建示範資料
-  sheetCsvUrl: "",
+  sheetCsvUrl: "https://docs.google.com/spreadsheets/d/1VXkbeMgpNDJEYvdAYIRoZMSOOdWtkH53YOPDnEi6c88/export?format=csv&gid=1426269459",
 
   // ② 欄位名稱 (對應你試算表的標題列,可自由改)
   columns: { name: "姓名", inviter: "邀請人", table: "桌次", industry: "產業/職稱", note: "備註" },
@@ -552,22 +552,30 @@ function parseCSV(text){
     return t.trim().replace(/^\d+\s*/, '').trim();
   };
   
-  const is_relation_or_title = (text) => {
-    const relation_keywords = ["素", "蛋奶素", "小孩", "女兒", "兒子", "太太", "媽媽", "爸爸", "親姊姊", "親姐姐", "先生", "奶奶", "親哥哥", "親弟弟", "家族"];
-    const title_keywords = [
+  const note_keywords = ["素", "蛋奶素", "小孩", "女兒", "兒子", "太太", "媽媽", "爸爸", "親姊姊", "親姐姐", "先生", "奶奶", "親哥哥", "親弟弟", "家族"];
+  const title_keywords = [
       "統包", "業", "師", "顧問", "設計", "工程", "服務", "代理", "經紀", "空間", "學", "管理", "照", "行銷", "房仲", "記帳士",
       "空調", "運輸", "出", "公仔", "床墊", "教父", "教母", "策展", "律師", "成衣", "空間", "網頁", "AI", "研究", "音樂", "建築", 
       "租賃", "銷售", "門窗", "飲食", "股份有限公司", "有限公司", "老闆", "主理人", "負責人", "總部", "總經理", "副教授",
       "學生", "防護", "材料", "五金", "印", "航空", "機能", "紡織", "物業", "統包", "幼兒園", "分會", "主席", "執董", "區董",
       "生命禮儀", "生命", "禮儀", "花藝", "撥筋", "出版", "新媒體", "金流", "室內", "裝修", "水電", "事務機", "影印機"
-    ];
+  ];
+
+  const is_note = (text) => note_keywords.some(k => text.toLowerCase().trim().includes(k));
+  const is_title = (text) => {
     const t_lower = text.toLowerCase().trim();
-    if (relation_keywords.some(k => t_lower.includes(k))) return true;
     if (title_keywords.some(k => t_lower.includes(k))) return true;
     if (text.length > 4) {
       if (/[\u4e00-\u9fa5]/.test(text) && text.length > 5) return true;
     }
     return false;
+  };
+  const is_relation_or_title = (text) => is_note(text) || is_title(text);
+  const looks_like_person = (text) => {
+    const t = clean_name(text).replace(/[()（）].*?[()（）]/g, "").trim();
+    if (!t) return false;
+    if (/[A-Za-z]/.test(t)) return true;
+    return /^[\u4e00-\u9fa5]{2,4}$/.test(t);
   };
   
   // 掃描尋找桌號
@@ -576,8 +584,8 @@ function parseCSV(text){
       const cell = grid[r][c].trim();
       if (!cell) continue;
       
-      if (cell === "主桌") {
-        table_positions.push({ r_idx: r, c_idx: c, tbl_label: "主桌" });
+      if (["主桌", "兒童桌", "備用", "接待桌"].includes(cell)) {
+        table_positions.push({ r_idx: r, c_idx: c, tbl_label: cell });
       } else if (cell.includes("｜")) {
         const parts = cell.split("｜");
         const possible_tbl = parts[0].trim();
@@ -635,10 +643,10 @@ function parseCSV(text){
       } else if (parts.length === 2) {
         const part0 = clean_name(parts[0]);
         const part1 = parts[1];
-        if (is_relation_or_title(part1)) {
+        if (is_note(part1) || is_title(part1)) {
           name = part0;
           inviter = name;
-          if (part1.includes("素") || part1.includes("蛋奶素")) {
+          if (is_note(part1)) {
             note = part1;
           } else {
             industry = part1;
@@ -652,7 +660,11 @@ function parseCSV(text){
         const part1 = parts[1];
         const part2 = parts[2];
         
-        if (is_relation_or_title(part1)) {
+        if (is_note(part1) && looks_like_person(part2) && !is_title(part2)) {
+          inviter = part0;
+          name = clean_name(part2);
+          note = part1;
+        } else if (is_relation_or_title(part1)) {
           name = part0;
           inviter = name;
           note = part1;
@@ -660,12 +672,8 @@ function parseCSV(text){
         } else {
           inviter = part0;
           name = clean_name(part1);
-          if (is_relation_or_title(part2)) {
-            if (part2.includes("素") || part2.includes("蛋奶素") || part2.includes("女兒") || part2.includes("兒子") || part2.includes("小孩")) {
-              note = part2;
-            } else {
-              industry = part2;
-            }
+          if (is_note(part2)) {
+            note = part2;
           } else {
             industry = part2;
           }
@@ -675,189 +683,32 @@ function parseCSV(text){
         const part1 = clean_name(parts[1]);
         const part2 = parts[2];
         const part3 = parts[3];
+        const rest = parts.slice(4).join(" / ");
         
-        if (is_relation_or_title(part1)) {
+        if (is_note(part1) && looks_like_person(part2)) {
+          inviter = part0;
+          name = clean_name(part2);
+          note = part1;
+          industry = part3 || "";
+          if (rest) note += " / " + rest;
+        } else if (is_note(part2)) {
+          inviter = part0;
+          name = part1;
+          note = part2;
+          industry = part3 || "";
+          if (rest) note += " / " + rest;
+        } else if (is_relation_or_title(part1)) {
           name = part0;
           inviter = name;
-          note = part1;
-          industry = part2;
-          if (parts.length > 3) {
-            note += " / " + part3;
-          }
+          note = is_note(part1) ? part1 : "";
+          industry = is_note(part1) ? part2 : part1;
+          const extras = [is_note(part1) ? part3 : part2, rest].filter(Boolean).join(" / ");
+          if (extras) note = [note, extras].filter(Boolean).join(" / ");
         } else {
           inviter = part0;
           name = part1;
           industry = part2;
-          note = part3;
-        }
-      }
-      
-      if (industry.includes("素") && !note) {
-        note = "素";
-        industry = industry.replace("素", "").replace("｜", "").trim();
-      }
-      
-      guests.push({
-        "姓名": name,
-        "邀請人": inviter === name ? "" : inviter,
-        "桌次": pos.tbl_label,
-        "產業/職稱": industry,
-        "備註": note
-      });
-      
-      r++;
-    }
-  });
-  
-  return guests;
-}
-  
-  // 否則，這是一個二維座位排版格式！使用我們的自動解析器
-  const grid = rows;
-  const guests = [];
-  const table_positions = []; // { r_idx, c_idx, tbl_label }
-  
-  const clean_name = (t) => {
-    return t.trim().replace(/^\d+\s*/, '').trim();
-  };
-  
-  const is_relation_or_title = (text) => {
-    const relation_keywords = ["素", "蛋奶素", "小孩", "女兒", "兒子", "太太", "媽媽", "爸爸", "親姊姊", "親姐姐", "先生", "奶奶", "親哥哥", "親弟弟", "家族"];
-    const title_keywords = [
-      "統包", "業", "師", "顧問", "設計", "工程", "服務", "代理", "經紀", "空間", "學", "管理", "照", "行銷", "房仲", "記帳士",
-      "空調", "運輸", "出", "公仔", "床墊", "教父", "教母", "策展", "律師", "成衣", "空間", "網頁", "AI", "研究", "音樂", "建築", 
-      "租賃", "銷售", "門窗", "飲食", "股份有限公司", "有限公司", "老闆", "主理人", "負責人", "總部", "總經理", "副教授",
-      "學生", "防護", "材料", "五金", "印", "航空", "機能", "紡織", "物業", "統包", "幼兒園", "分會", "主席", "執董", "區董",
-      "生命禮儀", "生命", "禮儀", "花藝", "撥筋", "出版", "新媒體", "金流", "室內", "裝修", "水電", "事務機", "影印機"
-    ];
-    const t_lower = text.toLowerCase().trim();
-    if (relation_keywords.some(k => t_lower.includes(k))) return true;
-    if (title_keywords.some(k => t_lower.includes(k))) return true;
-    if (text.length > 4) {
-      if (/[\u4e00-\u9fa5]/.test(text) && text.length > 5) return true;
-    }
-    return false;
-  };
-  
-  // 掃描尋找桌號
-  for(let r = 0; r < grid.length; r++) {
-    for(let c = 0; c < grid[r].length; c++) {
-      const cell = grid[r][c].trim();
-      if (!cell) continue;
-      
-      if (cell === "主桌") {
-        table_positions.push({ r_idx: r, c_idx: c, tbl_label: "主桌" });
-      } else if (cell.includes("｜")) {
-        const parts = cell.split("｜");
-        const possible_tbl = parts[0].trim();
-        if (/^\d+$/.test(possible_tbl) || possible_tbl === "主桌" || possible_tbl === "兒童桌" || possible_tbl === "備用" || possible_tbl === "接待桌") {
-          table_positions.push({ r_idx: r, c_idx: c, tbl_label: possible_tbl });
-        } else if (possible_tbl.length > 0 && (possible_tbl.endsWith("桌") || /^\d+$/.test(possible_tbl))) {
-          table_positions.push({ r_idx: r, c_idx: c, tbl_label: possible_tbl.replace("桌", "") });
-        }
-      }
-    }
-  }
-  
-  // 從每個桌號往下收集賓客
-  table_positions.forEach(pos => {
-    let r = pos.r_idx + 1;
-    const c = pos.c_idx;
-    
-    while(r < grid.length) {
-      if (c >= grid[r].length) break;
-      const cell = grid[r][c].trim();
-      
-      if (!cell) {
-        r++;
-        continue;
-      }
-      
-      // 格線或隔壁桌桌號
-      const row_str = grid[r].join("").trim();
-      if (!row_str || row_str.startsWith(",,") || (cell.includes("｜") && ["1｜", "2｜", "3｜", "4｜", "5｜", "6｜", "7｜", "8｜", "9｜"].some(k => cell.startsWith(k)))) {
-        break;
-      }
-      
-      if (cell.endsWith("｜") && /^\d+$/.test(cell.slice(0, -1).trim())) {
-        break;
-      }
-      
-      if (["舞 台", "主桌", "電梯", "兒童桌", "備用", "接待桌"].includes(cell)) {
-        break;
-      }
-      
-      const parts = cell.split("｜").map(p => p.trim()).filter(Boolean);
-      if (parts.length === 0) {
-        r++;
-        continue;
-      }
-      
-      let inviter = "";
-      let name = "";
-      let industry = "";
-      let note = "";
-      
-      if (parts.length === 1) {
-        name = clean_name(parts[0]);
-        inviter = name;
-      } else if (parts.length === 2) {
-        const part0 = clean_name(parts[0]);
-        const part1 = parts[1];
-        if (is_relation_or_title(part1)) {
-          name = part0;
-          inviter = name;
-          if (part1.includes("素") || part1.includes("蛋奶素")) {
-            note = part1;
-          } else {
-            industry = part1;
-          }
-        } else {
-          inviter = part0;
-          name = clean_name(part1);
-        }
-      } else if (parts.length === 3) {
-        const part0 = clean_name(parts[0]);
-        const part1 = parts[1];
-        const part2 = parts[2];
-        
-        if (is_relation_or_title(part1)) {
-          name = part0;
-          inviter = name;
-          note = part1;
-          industry = part2;
-        } else {
-          inviter = part0;
-          name = clean_name(part1);
-          if (is_relation_or_title(part2)) {
-            if (part2.includes("素") || part2.includes("蛋奶素") || part2.includes("女兒") || part2.includes("兒子") || part2.includes("小孩")) {
-              note = part2;
-            } else {
-              industry = part2;
-            }
-          } else {
-            industry = part2;
-          }
-        }
-      } else if (parts.length >= 4) {
-        const part0 = clean_name(parts[0]);
-        const part1 = clean_name(parts[1]);
-        const part2 = parts[2];
-        const part3 = parts[3];
-        
-        if (is_relation_or_title(part1)) {
-          name = part0;
-          inviter = name;
-          note = part1;
-          industry = part2;
-          if (parts.length > 3) {
-            note += " / " + part3;
-          }
-        } else {
-          inviter = part0;
-          name = part1;
-          industry = part2;
-          note = part3;
+          note = [part3, rest].filter(Boolean).join(" / ");
         }
       }
       
