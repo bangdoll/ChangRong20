@@ -233,6 +233,8 @@ const CONFIG = {
     "許翊弘": ["Toni"],
     "段宛菁": ["蝦蝦公主"],
     "蝦蝦公主": ["段宛菁"],
+    "林玟妗": ["娃姐"],
+    "娃姐": ["林玟妗"],
     "謝聰評": ["Smart", "國家董事"],
     "國家董事": ["Smart", "謝聰評"],
   },
@@ -404,7 +406,7 @@ JOYCE,邱惟隆,4,模特兒,
 曾柔萱,李世文,5,美業,
 魏光妹,李世文,5,奶奶,
 高碧鴻,,19,辦公家具/商辦系統櫃,
-高碧鴻,,19,出版新媒體,林玟妗/娃姐
+林玟妗/娃姐,高碧鴻,19,出版新媒體,
 彭晉澄,高碧鴻,19,網路行銷,
 蔡佩茹,高碧鴻,19,生前契約,
 鄧溢錩,高碧鴻,19,防水抓漏,
@@ -595,7 +597,7 @@ function parseCSV(text){
   const table_positions = []; // { r_idx, c_idx, tbl_label }
   
   const clean_name = (t) => {
-    return t.trim().replace(/^\d+\s*/, '').trim();
+    return t.trim().replace(/^\d+\s*/, '').replace(/\s*[\\/／]\s*/g, "/").trim();
   };
   const normalize_cell_pipes = (text) => text.replace(/\s+\|\s+/g, "｜");
   const split_cell_parts = (text) => {
@@ -631,11 +633,12 @@ function parseCSV(text){
     const t = clean_name(text).replace(/[()（）].*?[()（）]/g, "").trim();
     if (!t) return false;
     if (/[A-Za-z]/.test(t)) return true;
-    if (/^[\u4e00-\u9fa5]{2,4}$/.test(t)) return true;
-    const firstToken = t.split(/\s+/)[0];
+    const normalized = t.replace(/[\\/／]+/g, " ").replace(/\s+/g, " ").trim();
+    if (/^[\u4e00-\u9fa5]{2,4}$/.test(normalized)) return true;
+    const firstToken = normalized.split(/\s+/)[0];
     return /^[\u4e00-\u9fa5]{2,4}$/.test(firstToken) &&
-      t.length <= 12 &&
-      !title_keywords.some(k => t.toLowerCase().includes(k.toLowerCase()));
+      normalized.length <= 12 &&
+      !title_keywords.some(k => normalized.toLowerCase().includes(k.toLowerCase()));
   };
   
   // 掃描尋找桌號
